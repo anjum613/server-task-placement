@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from itertools import product
 from time import perf_counter
 import json
@@ -184,3 +184,144 @@ def solve_linear(inst: Instance, time_limit: float, relax: bool = False) -> dict
         out["gap"] = max(0.0, (out["objective"] - out["bound"]) / out["objective"])
     return out
 
+
+def _decode(inst: Instance, rng: np.random.Generator,
+            preferred: np.ndarray | None = None) -> np.ndarray | None:
+    """Feasible assignment repair with a randomized incremental-cost choice."""
+    n, m = inst.n, inst.m
+    cpu = np.zeros(m)
+    mem = np.zeros(m)
+    a = np.full(n, -1, dtype=int)
+    sizes = np.maximum(inst.task_cpu / np.mean(inst.server_cpu),
+                       inst.task_mem / np.mean(inst.server_mem))
+    order = np.argsort(-(sizes + rng.uniform(0, 0.025, n)))
+    for i in order:
+        feasible = (cpu + inst.task_cpu[i] <= inst.server_cpu) & (
+            mem + inst.task_mem[i] <= inst.server_mem)
+        if not np.any(feasible):
+            return None
+        p = -1 if preferred is None else int(preferred[i])
+        if 0 <= p < m and feasible[p] and rng.random() < 0.83:
+            j = p
+        else:
+            next_peak = np.maximum(np.max(cpu / inst.server_cpu),
+                                   (cpu + inst.task_cpu[i]) / inst.server_cpu)
+            score = inst.assignment_cost[i] + inst.fixed_cost * (cpu == 0)
+            score += inst.balance_weight * (
+                next_peak - np.max(cpu / inst.server_cpu))
+            score += rng.uniform(0, 12, m)
+            score[~feasible] = np.inf
+            j = int(np.argmin(score))
+        a[i] = j
+        cpu[j] += inst.task_cpu[i]
+        mem[j] += inst.task_mem[i]
+    return a
+
+
+def _improve(inst: Instance, a: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """One pass of feasible single-task moves, in random task order."""
+    best = a.copy()
+    cpu = np.bincount(best, weights=inst.task_cpu, minlength=inst.m)
+    mem = np.bincount(best, weights=inst.task_mem, minlength=inst.m)
+    counts = np.bincount(best, minlength=inst.m)
+    for i in rng.permutation(inst.n):
+        old = best[i]
+        candidates = np.flatnonzero((cpu + inst.task_cpu[i] <= inst.server_cpu) &
+                                    (mem + inst.task_mem[i] <= inst.server_mem))
+        for j in candidates:
+            if j == old:
+                continue
+            fixed_delta = (inst.fixed_cost[j] if counts[j] == 0 else 0) - (
+                inst.fixed_cost[old] if counts[old] == 1 else 0)
+            running_delta = inst.assignment_cost[i, j] - inst.assignment_cost[i, old]
+            peak_cpu = cpu.copy()
+            peak_cpu[old] -= inst.task_cpu[i]
+            peak_cpu[j] += inst.task_cpu[i]
+            balance_delta = inst.balance_weight * (
+                np.max(peak_cpu / inst.server_cpu) - np.max(cpu / inst.server_cpu))
+            delta = fixed_delta + running_delta + balance_delta
+            if delta < -1e-8:
+                best[i] = j
+                cpu = peak_cpu
+                mem[old] -= inst.task_mem[i]
+                mem[j] += inst.task_mem[i]
+                counts[old] -= 1
+                counts[j] += 1
+                break
+    return best
+
+
+def genetic(inst: Instance, time_limit: float, seed: int,
+            population_size: int = 24) -> dict:
+    """Feasibility-repaired GA: tournament, uniform crossover, mutation, elitism."""
+    rng = np.random.default_rng(seed)
+    start = perf_counter()
+    deadline = start + time_limit
+    population: list[tuple[float, np.ndarray]] = []
+    greedy_a, _ = greedy(inst)
+    if greedy_a is not None:
+        population.append((evaluate(inst, greedy_a)["objective"], greedy_a))
+    attempts = 0
+    while len(population) < population_size and perf_counter() < deadline and attempts < 5 * population_size:
+        attempts += 1
+        a = _decode(inst, rng, rng.integers(0, inst.m, inst.n))
+        if a is not None:
+            population.append((evaluate(inst, a)["objective"], a))
+    if not population:
+        return {"assignment": None, "runtime": perf_counter() - start,
+                "generations": 0, "status": "no feasible solution found"}
+    population.sort(key=lambda item: item[0])
+    best_cost, best_a = population[0][0], population[0][1].copy()
+    generations = 0
+    while perf_counter() < deadline and len(population) >= 2:
+        next_population = population[:2]
+        while len(next_population) < population_size and perf_counter() < deadline:
+            def select() -> np.ndarray:
+                ids = rng.integers(0, len(population), min(3, len(population)))
+                return min((population[k] for k in ids), key=lambda item: item[0])[1]
+            p1, p2 = select(), select()
+            choice = rng.random(inst.n) < 0.5
+            preferred = np.where(choice, p1, p2).copy()
+            mut = rng.random(inst.n) < max(0.025, 2 / inst.n)
+            preferred[mut] = rng.integers(0, inst.m, int(mut.sum()))
+            child = _decode(inst, rng, preferred)
+            if child is None:
+                continue
+            child = _improve(inst, child, rng)
+            cost = evaluate(inst, child)["objective"]
+            next_population.append((cost, child))
+            if cost < best_cost:
+                best_cost, best_a = cost, child.copy()
+        if len(next_population) <= 2:
+            break
+        population = sorted(next_population, key=lambda item: item[0])
+        generations += 1
+    return {"assignment": best_a, "metrics": evaluate(inst, best_a),
+            "runtime": perf_counter() - start, "generations": generations,
+            "status": "feasible"}
+
+
+def exhaustive_check() -> dict:
+    """Independent enumeration verifies the MILP and objective on a small case."""
+    inst = Instance.from_dict({
+        "task_cpu": [4, 5, 6, 3, 2], "task_mem": [6, 5, 7, 4, 3],
+        "server_cpu": [9, 10, 12], "server_mem": [12, 13, 14],
+        "fixed_cost": [22, 25, 30],
+        "assignment_cost": [[5, 7, 6], [8, 4, 6], [7, 6, 5],
+                            [4, 6, 5], [6, 5, 4]],
+        "balance_weight": 12.0})
+    candidates = []
+    for tup in product(range(inst.m), repeat=inst.n):
+        try:
+            candidates.append((evaluate(inst, np.asarray(tup))["objective"], tup))
+        except ValueError:
+            continue
+    exact = min(candidates)
+    milp_result = solve_linear(inst, 20)
+    if milp_result["assignment"] is None:
+        raise AssertionError("MILP did not return a small-case solution")
+    measured = evaluate(inst, milp_result["assignment"])["objective"]
+    if abs(measured - exact[0]) > 1e-5 or abs(measured - milp_result["objective"]) > 1e-5:
+        raise AssertionError("Small-case enumeration, MILP and independent check disagree")
+    return {"feasible_assignments": len(candidates), "optimum": exact[0],
+            "assignment": list(exact[1])}
