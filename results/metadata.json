@@ -1,0 +1,30 @@
+{
+  "budget_s": 1.0,
+  "ga_repetitions": 5,
+  "seeds": [
+    11,
+    22,
+    33
+  ],
+  "sizes": [
+    "20x4",
+    "50x8",
+    "100x12",
+    "200x24"
+  ],
+  "small_case_check": {
+    "feasible_assignments": 91,
+    "optimum": 91.0,
+    "assignment": [
+      0,
+      0,
+      2,
+      2,
+      2
+    ]
+  },
+  "python": "3.14.7",
+  "platform": "Linux-7.1.8-100.fc43.x86_64-x86_64-with-glibc2.42",
+  "numpy": "2.3.5",
+  "scipy": "1.16.2"
+}
