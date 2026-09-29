@@ -1,0 +1,103 @@
+Table~\ref{tab:ga-tuning} shows that the settings change both mean cost and
+run variation. All 330 runs returned feasible allocations. Every initial
+population reached its target size, and none of the 101877 attempted offspring
+repairs failed on these samples. These checks concern the generated workloads;
+they do not establish a general feasibility guarantee for the decoder.
+In the tuning runs, mean wall times were about 3.00 seconds at 100 tasks and 3.01 seconds at 200,
+with a largest observed overrun of 0.093 seconds while an operation finished.
+
+\input{ga_tuning/summary_table.tex}
+
+\paragraph{Population and selection.}
+Doubling the population from 24 to 48 did not improve mean cost at either size.
+At 200 tasks its mean cost was 0.53\% higher than the paired default.
+The smaller population of 12 improved the 100 task mean by 0.81\%, but made
+almost no difference at 200 tasks and increased run variation. At 100 tasks,
+populations 12, 24 and 48 completed means of 48.5, 20.4 and 9.8 full
+generations; at 200 tasks the figures were 14.5, 6.3 and 2.8. A generation
+contains a different number of children at each population size. The mean
+accepted offspring counts were much closer: about 489, 458 and 473 at
+100 tasks, and 150, 149 and 147 at 200. More generations therefore did not
+mean a proportional increase in candidate allocations. Larger populations
+also spent more of the allowance in initialisation.
+
+Tournament size 5 lowered the paired mean by 0.74\% at 100 tasks and 0.67\%
+at 200. Tournament size 2 and rank selection had lower means at 100 tasks
+but slightly higher means at 200. Stronger selection was useful on these
+tuning cases, although these differences are too limited to establish a
+generally preferred selection rule.
+
+\paragraph{Crossover and mutation.}
+Skipping crossover improved the tuning means by 1.27\% and 0.48\%; using
+crossover probability 0.6 improved them by 1.00\% and 0.29\%. These results
+show that uniform crossover was not automatically helpful under this short
+allowance and repair rule. They do not show that genetic recombination is
+ineffective generally. The decoder still changes preferences and the local
+pass still improves repaired children, even when crossover is skipped.
+
+Mutation rate 0.01 had the lowest mean paired change when both sizes were
+weighted equally: a 1.00\% reduction. Its mean costs were 1435.62 and
+2729.42 CU, compared with the default's 1457.36 and 2744.66 CU.
+The average within instance SD increased from 14.63 to 29.94 CU at
+100 tasks and from 14.13 to 28.23 CU at 200. Thus a lower average cost
+came with more variability. Mutation rate 0 was close behind on the tuning
+criterion. The high rate 0.08 raised mean cost at both sizes. Its small
+100 task SD of 0.93 CU describes consistency, but that consistency came
+with a more expensive mean allocation.
+
+Figure~\ref{fig:ga-settings} retains the differences between workloads.
+For mutation rate 0.01, the paired improvements at 100 tasks were 0.16\%,
+1.25\% and 2.97\% on seeds 11, 22 and 33. The latter two cases saved mean
+activation charges of 20.2 and 48.0 CU, while paying slightly more in
+assignment charges. Occasional better consolidation therefore accounts for
+much of the mean improvement. The effect is not uniform across instances.
+
+One possible explanation is that independent crossover and resets disrupt
+groups of tasks sharing a cheap server. A feasible repair need not restore
+those groups, and a single task move cannot always empty a server whose
+tasks would have to move together. This interpretation agrees with the
+observed cost components: at 200 tasks, mutation rate 0.08 paid a mean
+31.2 CU more in activation charges than the default, while their mean
+assignment charges were almost identical. The experiment does not isolate
+each mechanism, so it supports this explanation without proving it.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{ga_tuning/parameter_changes.png}
+\caption{Paired changes in GA cost at three seconds. Each hollow marker is an
+instance's mean across five paired runs; each solid diamond averages the three
+instance means. Negative values favour the changed setting. These markers
+describe instance variation, not confidence intervals.}
+\label{fig:ga-settings}
+\end{figure}
+
+\paragraph{Validation on new instances.}
+The selected setting changes only $p_m$ to 0.01. Table~\ref{tab:ga-validation}
+uses seeds 44, 55 and 66, which were excluded from selection. All 60
+validation runs were feasible. The pooled paired change was $+0.006\%$,
+effectively zero: $+0.020\%$ at 100 tasks and $-0.007\%$ at 200 tasks.
+The selected setting had a lower mean cost on three of the six workloads
+and won 17 of the 30 paired runs. These repeated runs share only six
+workloads, so they are not 30 independent tests of transfer to different data.
+
+\input{ga_validation/summary_table.tex}
+
+The tuning gain did not transfer consistently to the new seeds. I therefore
+retain the original default rate for the main comparison and treat 0.01 as
+a candidate for a particular workload, rather than a generally improved
+setting. The validation set was not used to choose a second winner.
+This outcome is useful: settings that look favourable on a small tuning set
+can make almost no difference on another set from the same generator.
+The study is limited to three seconds, two sizes and one parameter at a time;
+it does not identify an optimum over all GA settings or their interactions.
+
+\Needspace{7\baselineskip}
+The validation can be repeated with the study script using
+\begin{verbatim}
+python3 run_ga_study.py --phase validation \
+  --configs baseline mutation_001 --budget 3 \
+  --repetitions 5 --output ga_validation_new
+\end{verbatim}
+The raw records, saved assignments and improvement traces support these
+comparisons, including the validation result that did not favour the tuning
+winner overall.

@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{GA settings at three seconds. Each size has three instances and five runs per setting. Cost and SD are in CU; SD is the average within instance sample standard deviation. Change is the mean paired percentage change from the default.}
+\label{tab:ga-tuning}
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{3}{c}{100 tasks, 12 servers} & \multicolumn{3}{c}{200 tasks, 24 servers} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Setting & Cost & Change (\%) & SD & Cost & Change (\%) & SD \\
+\midrule
+Default & 1457.36 & $0.00$ & 14.63 & 2744.66 & $0.00$ & 14.13 \\
+Population $N_{\rm pop}=12$ & 1444.89 & $-0.81$ & 29.31 & 2744.68 & $0.00$ & 30.49 \\
+Population $N_{\rm pop}=48$ & 1457.63 & $+0.02$ & 14.15 & 2758.87 & $+0.53$ & 27.37 \\
+Tournament $k=2$ & 1449.44 & $-0.51$ & 14.03 & 2751.49 & $+0.26$ & 12.89 \\
+Tournament $k=5$ & 1446.25 & $-0.74$ & 25.74 & 2726.22 & $-0.67$ & 18.38 \\
+Rank selection & 1447.78 & $-0.62$ & 27.87 & 2755.95 & $+0.41$ & 33.11 \\
+Crossover $p_c=0$ & 1438.02 & $-1.27$ & 25.10 & 2731.35 & $-0.48$ & 22.12 \\
+Crossover $p_c=0.6$ & 1442.30 & $-1.00$ & 23.91 & 2737.08 & $-0.29$ & 27.37 \\
+Mutation $p_m=0$ & 1435.86 & $-1.44$ & 29.14 & 2732.71 & $-0.44$ & 18.96 \\
+Mutation $p_m=0.01$ & 1435.62 & $-1.46$ & 29.94 & 2729.42 & $-0.55$ & 28.23 \\
+Mutation $p_m=0.08$ & 1464.69 & $+0.52$ & 0.93 & 2775.86 & $+1.18$ & 23.15 \\
+\bottomrule
+\end{tabular}
+\end{table}

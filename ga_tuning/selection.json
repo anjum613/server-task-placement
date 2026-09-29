@@ -1,0 +1,18 @@
+{
+  "configuration": "mutation_001",
+  "criterion": "minimum mean paired cost change; equal weight to each size and instance",
+  "pooled_tuning_change_pct": -1.004218401685226,
+  "all_configurations": {
+    "baseline": 0.0,
+    "tournament_5": -0.7041120234028626,
+    "crossover_0": -0.8745881979462646,
+    "population_48": 0.2756085913551898,
+    "population_12": -0.405791287697241,
+    "crossover_06": -0.6431927229306988,
+    "mutation_0": -0.9372574965675329,
+    "tournament_2": -0.123166449656857,
+    "mutation_008": 0.8460393714494392,
+    "mutation_001": -1.004218401685226,
+    "rank_selection": -0.10144505802324577
+  }
+}

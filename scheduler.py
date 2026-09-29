@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from itertools import product
 from time import perf_counter
 import json
@@ -186,7 +186,8 @@ def solve_linear(inst: Instance, time_limit: float, relax: bool = False) -> dict
 
 
 def _decode(inst: Instance, rng: np.random.Generator,
-            preferred: np.ndarray | None = None) -> np.ndarray | None:
+            preferred: np.ndarray | None = None, *, retention: float = 0.83,
+            noise: float = 12.0, order_jitter: float = 0.025) -> np.ndarray | None:
     """Feasible assignment repair with a randomized incremental-cost choice."""
     n, m = inst.n, inst.m
     cpu = np.zeros(m)
@@ -194,14 +195,14 @@ def _decode(inst: Instance, rng: np.random.Generator,
     a = np.full(n, -1, dtype=int)
     sizes = np.maximum(inst.task_cpu / np.mean(inst.server_cpu),
                        inst.task_mem / np.mean(inst.server_mem))
-    order = np.argsort(-(sizes + rng.uniform(0, 0.025, n)))
+    order = np.argsort(-(sizes + rng.uniform(0, order_jitter, n)))
     for i in order:
         feasible = (cpu + inst.task_cpu[i] <= inst.server_cpu) & (
             mem + inst.task_mem[i] <= inst.server_mem)
         if not np.any(feasible):
             return None
         p = -1 if preferred is None else int(preferred[i])
-        if 0 <= p < m and feasible[p] and rng.random() < 0.83:
+        if 0 <= p < m and feasible[p] and rng.random() < retention:
             j = p
         else:
             next_peak = np.maximum(np.max(cpu / inst.server_cpu),
@@ -209,7 +210,7 @@ def _decode(inst: Instance, rng: np.random.Generator,
             score = inst.assignment_cost[i] + inst.fixed_cost * (cpu == 0)
             score += inst.balance_weight * (
                 next_peak - np.max(cpu / inst.server_cpu))
-            score += rng.uniform(0, 12, m)
+            score += rng.uniform(0, noise, m)
             score[~feasible] = np.inf
             j = int(np.argmin(score))
         a[i] = j
@@ -251,9 +252,76 @@ def _improve(inst: Instance, a: np.ndarray, rng: np.random.Generator) -> np.ndar
     return best
 
 
+@dataclass(frozen=True)
+class GAConfig:
+    """Fixed settings for one run. Probabilities are fractions, noise is in cost units."""
+    population_size: int = 24
+    selection: str = "tournament"
+    tournament_size: int = 3
+    crossover_rate: float = 1.0
+    mutation_rate: float | None = None
+    retention: float = 0.83
+    decoder_noise: float = 12.0
+    order_jitter: float = 0.025
+
+    def validate(self) -> None:
+        for name, minimum in (("population_size", 3), ("tournament_size", 1)):
+            value = getattr(self, name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+                raise ValueError(f"{name} must be an integer of at least {minimum}")
+        if self.selection not in ("tournament", "rank"):
+            raise ValueError("selection must be tournament or rank")
+        probabilities = (self.crossover_rate, self.retention)
+        if self.mutation_rate is not None:
+            probabilities += (self.mutation_rate,)
+        if any(not np.isfinite(v) or not 0 <= v <= 1 for v in probabilities):
+            raise ValueError("Crossover, mutation and retention must be between zero and one")
+        if any(not np.isfinite(v) or v < 0 for v in
+               (self.decoder_noise, self.order_jitter)):
+            raise ValueError("Decoder noise and order jitter must be finite and nonnegative")
+
+    def resolved_mutation_rate(self, n: int) -> float:
+        return min(1.0, max(0.025, 2 / n)) if self.mutation_rate is None else self.mutation_rate
+
+
+def _select_parent(population: list[tuple[float, np.ndarray]],
+                   rng: np.random.Generator, config: GAConfig) -> np.ndarray:
+    """The population is sorted by increasing cost; tournament draws replace samples."""
+    count = len(population)
+    if config.selection == "rank":
+        weights = np.arange(count, 0, -1, dtype=float)
+        index = int(rng.choice(count, p=weights / weights.sum()))
+        return population[index][1]
+    ids = rng.integers(0, count, min(config.tournament_size, count))
+    return min((population[k] for k in ids), key=lambda item: item[0])[1]
+
+
+def _recombine(p1: np.ndarray, p2: np.ndarray, m: int,
+               rng: np.random.Generator, config: GAConfig) -> np.ndarray:
+    """Uniform crossover, then independent random-reset mutation of preferred indices."""
+    if config.crossover_rate == 1 or (
+            config.crossover_rate > 0 and rng.random() < config.crossover_rate):
+        preferred = np.where(rng.random(len(p1)) < 0.5, p1, p2).copy()
+    else:
+        preferred = p1.copy()
+    mut = rng.random(len(p1)) < config.resolved_mutation_rate(len(p1))
+    # A reset can choose the old value again; this is an attempted mutation rate.
+    preferred[mut] = rng.integers(0, m, int(mut.sum()))
+    return preferred
+
+
 def genetic(inst: Instance, time_limit: float, seed: int,
-            population_size: int = 24) -> dict:
-    """Feasibility-repaired GA: tournament, uniform crossover, mutation, elitism."""
+            population_size: int = 24, *, config: GAConfig | None = None) -> dict:
+    """Feasible GA with explicit settings, two elites and single-task local improvement.
+
+    Initialization and search share the same wall-time allowance. A repair or local
+    pass already in progress is completed, so measured time can exceed the limit.
+    """
+    settings = config or GAConfig(population_size=population_size)
+    settings.validate()
+    if not np.isfinite(time_limit) or time_limit <= 0:
+        raise ValueError("time_limit must be positive and finite")
+    population_size = settings.population_size
     rng = np.random.default_rng(seed)
     start = perf_counter()
     deadline = start + time_limit
@@ -264,41 +332,59 @@ def genetic(inst: Instance, time_limit: float, seed: int,
     attempts = 0
     while len(population) < population_size and perf_counter() < deadline and attempts < 5 * population_size:
         attempts += 1
-        a = _decode(inst, rng, rng.integers(0, inst.m, inst.n))
+        a = _decode(inst, rng, rng.integers(0, inst.m, inst.n),
+                    retention=settings.retention, noise=settings.decoder_noise,
+                    order_jitter=settings.order_jitter)
         if a is not None:
             population.append((evaluate(inst, a)["objective"], a))
+    initialization_s = perf_counter() - start
+    initial_population_size = len(population)
+    diagnostics = {"initialization_s": initialization_s,
+                   "initial_population_size": initial_population_size,
+                   "initialization_attempts": attempts,
+                   "initialization_failures": attempts - initial_population_size + int(greedy_a is not None),
+                   "settings": asdict(settings) | {
+                       "effective_mutation_rate": settings.resolved_mutation_rate(inst.n)}}
     if not population:
         return {"assignment": None, "runtime": perf_counter() - start,
-                "generations": 0, "status": "no feasible solution found"}
+                "generations": 0, "status": "no feasible solution found", **diagnostics}
     population.sort(key=lambda item: item[0])
     best_cost, best_a = population[0][0], population[0][1].copy()
-    generations = 0
+    initial_best_objective = best_cost
+    trace = [{"time_s": perf_counter() - start, "objective": best_cost}]
+    generations = complete_generations = offspring_attempts = offspring_accepted = 0
     while perf_counter() < deadline and len(population) >= 2:
         next_population = population[:2]
         while len(next_population) < population_size and perf_counter() < deadline:
-            def select() -> np.ndarray:
-                ids = rng.integers(0, len(population), min(3, len(population)))
-                return min((population[k] for k in ids), key=lambda item: item[0])[1]
-            p1, p2 = select(), select()
-            choice = rng.random(inst.n) < 0.5
-            preferred = np.where(choice, p1, p2).copy()
-            mut = rng.random(inst.n) < max(0.025, 2 / inst.n)
-            preferred[mut] = rng.integers(0, inst.m, int(mut.sum()))
-            child = _decode(inst, rng, preferred)
+            offspring_attempts += 1
+            p1 = _select_parent(population, rng, settings)
+            p2 = _select_parent(population, rng, settings)
+            preferred = _recombine(p1, p2, inst.m, rng, settings)
+            child = _decode(inst, rng, preferred, retention=settings.retention,
+                            noise=settings.decoder_noise, order_jitter=settings.order_jitter)
             if child is None:
                 continue
             child = _improve(inst, child, rng)
             cost = evaluate(inst, child)["objective"]
             next_population.append((cost, child))
+            offspring_accepted += 1
             if cost < best_cost:
                 best_cost, best_a = cost, child.copy()
+                trace.append({"time_s": perf_counter() - start, "objective": best_cost})
         if len(next_population) <= 2:
             break
         population = sorted(next_population, key=lambda item: item[0])
         generations += 1
+        complete_generations += int(len(next_population) == population_size)
     return {"assignment": best_a, "metrics": evaluate(inst, best_a),
             "runtime": perf_counter() - start, "generations": generations,
-            "status": "feasible"}
+            "complete_generations": complete_generations,
+            "offspring_attempts": offspring_attempts,
+            "offspring_accepted": offspring_accepted,
+            "offspring_failures": offspring_attempts - offspring_accepted,
+            "initial_best_objective": initial_best_objective,
+            "time_to_best_s": trace[-1]["time_s"], "trace": trace,
+            "status": "feasible", **diagnostics}
 
 
 def exhaustive_check() -> dict:

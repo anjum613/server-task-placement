@@ -1,0 +1,100 @@
+{
+  "selected": "mutation_001",
+  "tuning": {
+    "configuration": "mutation_001",
+    "criterion": "minimum mean paired cost change; equal weight to each size and instance",
+    "pooled_tuning_change_pct": -1.004218401685226,
+    "all_configurations": {
+      "baseline": 0.0,
+      "tournament_5": -0.7041120234028626,
+      "crossover_0": -0.8745881979462646,
+      "population_48": 0.2756085913551898,
+      "population_12": -0.405791287697241,
+      "crossover_06": -0.6431927229306988,
+      "mutation_0": -0.9372574965675329,
+      "tournament_2": -0.123166449656857,
+      "mutation_008": 0.8460393714494392,
+      "mutation_001": -1.004218401685226,
+      "rank_selection": -0.10144505802324577
+    }
+  },
+  "validation_cases": [
+    {
+      "case": "n100_m12_s44",
+      "tasks": 100,
+      "seed": 44,
+      "mean_default_cost": 1582.653823866969,
+      "mean_selected_cost": 1583.1331208968834,
+      "default_sd": 1.6410388197044499,
+      "selected_sd": 1.4231274832160608,
+      "mean_paired_change_pct": 0.030429633086741514,
+      "paired_wins": 3,
+      "repetitions": 5
+    },
+    {
+      "case": "n100_m12_s55",
+      "tasks": 100,
+      "seed": 55,
+      "mean_default_cost": 1320.6085300197055,
+      "mean_selected_cost": 1318.8002634053641,
+      "default_sd": 2.3097847228877497,
+      "selected_sd": 3.718142354900742,
+      "mean_paired_change_pct": -0.13690917723373275,
+      "paired_wins": 3,
+      "repetitions": 5
+    },
+    {
+      "case": "n100_m12_s66",
+      "tasks": 100,
+      "seed": 66,
+      "mean_default_cost": 1532.7181155217243,
+      "mean_selected_cost": 1535.2493682770692,
+      "default_sd": 2.47434408795018,
+      "selected_sd": 1.9664004517575784,
+      "mean_paired_change_pct": 0.16544960684068855,
+      "paired_wins": 2,
+      "repetitions": 5
+    },
+    {
+      "case": "n200_m24_s44",
+      "tasks": 200,
+      "seed": 44,
+      "mean_default_cost": 2800.6260349057625,
+      "mean_selected_cost": 2800.109062514229,
+      "default_sd": 4.416476954182964,
+      "selected_sd": 1.1496910092642345,
+      "mean_paired_change_pct": -0.018259834031326694,
+      "paired_wins": 3,
+      "repetitions": 5
+    },
+    {
+      "case": "n200_m24_s55",
+      "tasks": 200,
+      "seed": 55,
+      "mean_default_cost": 2787.573412539532,
+      "mean_selected_cost": 2793.373915377421,
+      "default_sd": 18.19280559414749,
+      "selected_sd": 19.568629418100418,
+      "mean_paired_change_pct": 0.21417114459115094,
+      "paired_wins": 2,
+      "repetitions": 5
+    },
+    {
+      "case": "n200_m24_s66",
+      "tasks": 200,
+      "seed": 66,
+      "mean_default_cost": 2881.721364094901,
+      "mean_selected_cost": 2875.4439866972893,
+      "default_sd": 3.526403247677834,
+      "selected_sd": 11.136370245254074,
+      "mean_paired_change_pct": -0.21797218219346437,
+      "paired_wins": 4,
+      "repetitions": 5
+    }
+  ],
+  "pooled_validation_change_pct": 0.006151531843342865,
+  "validation_instance_mean_wins": 3,
+  "validation_paired_wins": 17,
+  "validation_100_change_pct": 0.01965668756456577,
+  "validation_200_change_pct": -0.0073536238778800405
+}
