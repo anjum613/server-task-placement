@@ -759,46 +759,39 @@ tested one second hybrid scheduler.
 
 \subsection{Running the code with different data}
 
-The supplied \texttt{run\_experiments.py} contains the model, algorithms,
-experiment commands and recorded numerical evidence in one file. It requires
-Python 3.11 or later, NumPy and SciPy. Install pandas and Matplotlib for the
-plotting and benchmark verification commands. From the folder containing the
-file, the main commands are
+The model and algorithms are in \texttt{scheduler.py}, with separate scripts
+for experiments, plots and checks. The project requires Python 3.11 or later.
+From the project folder, a small run can be made with
 \begin{verbatim}
-python3 -m pip install numpy scipy pandas matplotlib
-python3 run_experiments.py --budget 1 --repetitions 5
-python3 run_experiments.py --sizes 100x12 200x24 \
-  --budget 3 --repetitions 1 --output results_3s
-python3 run_experiments.py sensitivity
-python3 run_experiments.py study --budget 3 --repetitions 5
-python3 run_experiments.py plot
-python3 run_experiments.py study-plot
+python3 -m pip install -r requirements.txt
+python3 run_experiments.py --sizes 20x4 --seeds 11 \
+  --budget 1 --repetitions 1 --output local_results
 \end{verbatim}
-The benchmark writes raw CSV, instances, allocations and version details under
-\texttt{results/}; the default setting study writes to \texttt{ga\_tuning/}.
+The benchmark writes raw CSV, instances, allocations and version details to
+the chosen output directory. The saved full benchmarks are in \texttt{results/}
+and \texttt{results\_3s/}; the setting studies are in \texttt{ga\_tuning/}
+and \texttt{ga\_validation/}.
 New instance sizes and seeds can be passed with, for example,
-\texttt{-{}-sizes 30x5 80x10 -{}-seeds 4 5}. Use \texttt{-{}-output results\_new}
-to keep a new run separate from existing results. Individual GA settings can be
+\texttt{-{}-sizes 30x5 80x10 -{}-seeds 4 5}. Use a new output directory
+to keep a run separate from the saved results. Individual GA settings can be
 changed with \texttt{-{}-population}, \texttt{-{}-selection},
 \texttt{-{}-tournament}, \texttt{-{}-crossover} and \texttt{-{}-mutation}.
-Running either command with \texttt{-{}-help} lists its options. The validation
-command and selected configuration are given with the setting study results.
+Running \texttt{run\_experiments.py} or \texttt{run\_ga\_study.py} with
+\texttt{-{}-help} lists the options.
 
 \Needspace{11\baselineskip}
-The recorded evidence can be exported without rerunning the time limited searches:
+The saved allocations and bounds can be checked without rerunning the time
+limited searches:
 \begin{verbatim}
-python3 run_experiments.py snapshot
-python3 run_experiments.py verify \
-  --results recorded_results/results
-python3 run_experiments.py study \
-  --verify recorded_results/ga_tuning
-python3 run_experiments.py study \
-  --verify recorded_results/ga_validation
+python3 verify_results.py --results results
+python3 verify_results.py --results results_3s
+python3 run_ga_study.py --verify ga_tuning
+python3 run_ga_study.py --verify ga_validation
 \end{verbatim}
-This exports the measured inputs, allocations, raw tables, settings, improvement
-traces and source modules to \texttt{recorded\_results/}. Repeating a timed run
-uses the same data and random seed rules, but it need not reproduce exactly the
-same incumbent because the number of operations completed depends on machine load.
+The repository includes the measured inputs, allocations, raw tables, settings
+and improvement traces. Repeating a timed run uses the same data and random seed
+rules, but it need not reproduce exactly the same incumbent because the number
+of operations completed depends on machine load.
 
 For external data, use a JSON file with consistent units. A three task example is
 \begin{verbatim}
